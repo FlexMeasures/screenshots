@@ -10,6 +10,25 @@ from pathlib import Path
 
 ASSETS_DIR = Path(__file__).parent / "logo_assets"
 
+# Some assets (those using the display-toggle duplicate pattern, e.g. two
+# sibling <g id="...-light"/"...-dark"> elements plus a trailing <style>)
+# have more than one top-level node, which isn't valid as a standalone XML
+# document (GNOME Image Viewer/librsvg will refuse to open such a file with
+# "Extra content at the end of the document"). To keep those asset files
+# independently openable/previewable, they're wrapped in an outer
+# <svg data-standalone-wrapper="1"> ... </svg> that exists only for
+# standalone-document validity; it must be stripped before splicing the
+# fragment into the main diagram, since the diagram already provides the
+# single root <svg> and the wrapper carries no positioning of its own.
+_STANDALONE_WRAPPER_RE = re.compile(
+    r'^<svg[^>]*\bdata-standalone-wrapper="1"[^>]*>(.*)</svg>\s*$', re.DOTALL
+)
+
+
+def _strip_standalone_wrapper(fragment: str) -> str:
+    m = _STANDALONE_WRAPPER_RE.match(fragment.strip())
+    return m.group(1) if m else fragment
+
 # Each logo is located in a freshly-exported (draw.io) SVG by its raster
 # <image width="..." height="..."/> placeholder -- draw.io always re-emits
 # these as plain data-URI raster images on save, regardless of any previous
@@ -97,6 +116,7 @@ def fix_logo(svg: str, logo: dict) -> str:
 
     found_x, found_y = m.group(1), m.group(2)
     fragment = (ASSETS_DIR / logo["asset"]).read_text()
+    fragment = _strip_standalone_wrapper(fragment)
 
     if "shrink" in logo:
         x, y = float(found_x), float(found_y)
